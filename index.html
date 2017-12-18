@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Client Side Encryption</title>
+    <script type="application/javascript">
+        function onLoad() {
+            if (!window.crypto || !window.crypto.subtle) {
+                alert("Your current browser does not support the Web Cryptography API! This page will not work.");
+                return;
+            }
+
+
+            // Check for the various File API support.
+            if (window.File && window.FileReader && window.FileList && window.Blob) {
+                // Great success! All the File APIs are supported.
+            } else {
+                alert('The File APIs are not fully supported in this browser.');
+            }
+
+
+            document.querySelector("#encryptForm").addEventListener("submit", function (e) {
+                e.preventDefault();    //stop form from submitting
+
+                console.log("Value to encrypt", e.target.querySelector("#encryptField").value)
+
+                var sessionKey, encryptedFile; // Used in two steps, so saved here for passing
+
+                encryptedValue = window.crypto.subtle.generateKey(
+                    {name: "AES-CBC", length: 128},
+                    true,
+                    ["encrypt", "decrypt"])
+                    .then(saveSessionKey) // Need this in a later (not just the next) step
+                    .then(encryptPlaintext)
+                    .then(saveEncryptedFile) // Need this result in a later step
+                    .then(exportSessionKey)
+                    .then(encryptSessionKey)
+                    .then(packageResults)
+                    .then(function (value) {
+                        var a = document.createElement("a");
+                        document.body.appendChild(a);
+                        a.style = "display: none";
+
+                        console.log("Encrypted", value)
+                        url = window.URL.createObjectURL(value);
+                        a.href = url;
+                        a.download = name;
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                    });
+            });
+
+            document.querySelector("#decryptForm").addEventListener("submit", function (e) {
+                e.preventDefault();    //stop form from submitting
+
+                var sourceFile = document.querySelector("#encryptedData").files[0]
+
+                var reader = new FileReader();
+                reader.onload = processTheFile;
+                reader.readAsArrayBuffer(sourceFile);
+
+                function processTheFile() {
+                    var reader = this;              // Invoked by the reader object
+                    var data = reader.result;
+
+                    var keyLength       = new Uint16Array(data, 0, 2)[0];   // First 16 bit integer
+                    var encryptedKey    = new Uint8Array( data, 2,              keyLength);
+                    var iv              = new Uint8Array( data, 2 + keyLength,  16);
+                    var ciphertext      = new Uint8Array( data, 2 + keyLength + 16);
+
+                    decrypt(ciphertext, iv, encryptedKey).
+                    then(function(blob) {
+                        console.log("Blob", blob)
+                    }).
+                    catch(function(err) {
+                        console.log("Something went wrong decrypting: " + err.message + "\n" + err.stack);
+                    });
+                }
+
+            });
+        }
+
+        function saveSessionKey(key) {
+            sessionKey = key;
+            return key;
+        }
+
+        function encryptPlaintext(sessionKey) {
+            var enc = new TextEncoder("utf-8");
+
+            // The plaintext is in an enclosing scope, called plaintext
+            var iv = window.crypto.getRandomValues(new Uint8Array(16));
+            return window.crypto.subtle.encrypt({name: "AES-CBC", iv: iv}, sessionKey, enc.encode(document.querySelector("#encryptField").value)).
+            then(function(ciphertext) {
+                return [iv, new Uint8Array(ciphertext)];
+            });
+        }
+
+        function saveEncryptedFile(ivAndCiphertext) {
+            encryptedFile = ivAndCiphertext;
+        }
+
+        function exportSessionKey() {
+            // Exports the sessionKey from the enclosing scope.
+            return window.crypto.subtle.exportKey('raw', sessionKey);
+        }
+
+        function encryptSessionKey(exportedKey) {
+            // TODO Add some logic here to encrypt the key
+            return exportedKey
+        }
+
+        function packageResults(encryptedKey) {
+            var length = new Uint16Array([encryptedKey.byteLength]);
+            return new Blob(
+                [
+                    length,             // Always a 2 byte unsigned integer
+                    encryptedKey,       // "length" bytes long
+                    encryptedFile[0],   // 16 bytes long initialization vector
+                    encryptedFile[1]    // Remainder is the ciphertext
+                ],
+                {type: "application/octet-stream"}
+            );
+        }
+
+        function decrypt(ciphertext, iv, sessionKey) {
+            return decryptKey(sessionKey)
+                .then(importSessionKey)
+                .then(function (sessionKey) {
+                    decryptCiphertext(sessionKey, iv, ciphertext)
+                });
+        }
+
+        function decryptKey(encryptedKey) {
+            // TODO Add some logic here to decrypt the key
+            return Promise.resolve(encryptedKey)
+        }
+
+        function importSessionKey(keyBytes) {
+            return window.crypto.subtle.importKey(
+                "raw",
+                keyBytes,
+                {name: "AES-CBC", length: 128},
+                true,
+                ["encrypt", "decrypt"]
+            );
+        }
+
+        function decryptCiphertext(sessionKey, iv, ciphertext) {
+            return window.crypto.subtle.decrypt({name: "AES-CBC", iv: iv}, sessionKey, ciphertext).
+            then(function(plaintext) {
+                var enc = new TextDecoder("utf-8");
+                console.log(enc.decode(plaintext))
+
+                document.querySelector("#decryptedField").value = enc.decode(plaintext)
+            });
+        }
+
+
+    </script>
+</head>
+<body onload="onLoad()">
+
+<h2>Encrypt</h2>
+<form id="encryptForm">
+
+    <textarea name="encrypt" id="encryptField"></textarea>
+    <br/>
+    <button type="submit">Encrypt</button>
+
+</form>
+
+<h2>Decrypt</h2>
+<form id="decryptForm">
+
+    <input type="file" id="encryptedData">
+    <br/>
+    <button type="submit">Decrypt</button>
+
+    <br/>
+
+    <textarea id="decryptedField"></textarea>
+
+</form>
+
+</body>
+</html>
