@@ -99,7 +99,7 @@
             var enc = new TextEncoder("utf-8");
 
             // The plaintext is in an enclosing scope, called plaintext
-            var iv = window.crypto.getRandomValues(new Uint8Array(12));
+            var iv = window.crypto.getRandomValues(new Uint8Array(16));
             return window.crypto.subtle.encrypt({
                     name: "AES-GCM",
 
@@ -110,9 +110,6 @@
 
                     //Additional authentication data (optional)
                     // additionalData: new ArrayBuffer(),
-
-                    //Tag length (optional)
-                    // tagLength: 128, //can be 32, 64, 96, 104, 112, 120 or 128 (default)
                 },
                 sessionKey, //from generateKey or importKey above
                 enc.encode(document.querySelector("#encryptField").value) //ArrayBuffer of data you want to encrypt
@@ -163,14 +160,13 @@
 
         function importSessionKey(keyBytes) {
             return window.crypto.subtle.importKey(
-                "raw", //can be "jwk" or "raw"
+                "raw",
                 keyBytes,
-                {   //this is the algorithm options
-                    name: "AES-GCM",
-                    length: 256
+                {
+                    name: "AES-GCM"
                 },
-                true, //whether the key is extractable (i.e. can be used in exportKey)
-                ["encrypt", "decrypt"] //can "encrypt", "decrypt", "wrapKey", or "unwrapKey"
+                false, //whether the key is extractable (i.e. can be used in exportKey)
+                ["decrypt"] //can "encrypt", "decrypt", "wrapKey", or "unwrapKey"
             );
         }
 
@@ -180,15 +176,10 @@
                     name: "AES-GCM",
                     iv: iv, //The initialization vector you used to encrypt
                     // additionalData: new ArrayBuffer(), //The addtionalData you used to encrypt (if any)
-                    // tagLength: 128 //The tagLength you used to encrypt (if any)
                 },
                 sessionKey, //from generateKey or importKey above
                 ciphertext //ArrayBuffer of the data
             )
-
-                .catch(function (reason) {
-                    console.error(reason)
-                });
         }
 
 
