@@ -27,9 +27,13 @@
                 var sessionKey, encryptedFile; // Used in two steps, so saved here for passing
 
                 encryptedValue = window.crypto.subtle.generateKey(
-                    {name: "AES-CBC", length: 128},
-                    true,
-                    ["encrypt", "decrypt"])
+                    {
+                        name: "AES-GCM",
+                        length: 256, //can be  128, 192, or 256
+                    },
+                    true, //whether the key is extractable (i.e. can be used in exportKey)
+                    ["encrypt", "decrypt"] //can "encrypt", "decrypt", "wrapKey", or "unwrapKey"
+                )
                     .then(saveSessionKey) // Need this in a later (not just the next) step
                     .then(encryptPlaintext)
                     .then(saveEncryptedFile) // Need this result in a later step
@@ -47,6 +51,9 @@
                         a.download = name;
                         a.click();
                         window.URL.revokeObjectURL(url);
+                    })
+                    .catch(function (err) {
+                        console.error(err);
                     });
             });
 
@@ -63,18 +70,21 @@
                     var reader = this;              // Invoked by the reader object
                     var data = reader.result;
 
-                    var keyLength       = new Uint16Array(data, 0, 2)[0];   // First 16 bit integer
-                    var encryptedKey    = new Uint8Array( data, 2,              keyLength);
-                    var iv              = new Uint8Array( data, 2 + keyLength,  16);
-                    var ciphertext      = new Uint8Array( data, 2 + keyLength + 16);
+                    var keyLength = new Uint16Array(data, 0, 2)[0];   // First 16 bit integer
+                    var encryptedKey = new Uint8Array(data, 2, keyLength);
+                    var iv = new Uint8Array(data, 2 + keyLength, 16);
+                    var ciphertext = new Uint8Array(data, 2 + keyLength + 16);
 
-                    decrypt(ciphertext, iv, encryptedKey).
-                    then(function(blob) {
-                        console.log("Blob", blob)
-                    }).
-                    catch(function(err) {
-                        console.log("Something went wrong decrypting: " + err.message + "\n" + err.stack);
-                    });
+                    decrypt(ciphertext, iv, encryptedKey)
+                        .then(function (plaintext) {
+                            var enc = new TextDecoder("utf-8");
+                            console.log(enc.decode(plaintext));
+
+                            document.querySelector("#decryptedField").value = enc.decode(plaintext);
+                        }).catch(function (err) {
+                            console.error("Something went wrong decrypting: " + err.message + "\n" + err.stack);
+                            console.error(err);
+                        });
                 }
 
             });
@@ -89,9 +99,24 @@
             var enc = new TextEncoder("utf-8");
 
             // The plaintext is in an enclosing scope, called plaintext
-            var iv = window.crypto.getRandomValues(new Uint8Array(16));
-            return window.crypto.subtle.encrypt({name: "AES-CBC", iv: iv}, sessionKey, enc.encode(document.querySelector("#encryptField").value)).
-            then(function(ciphertext) {
+            var iv = window.crypto.getRandomValues(new Uint8Array(12));
+            return window.crypto.subtle.encrypt({
+                    name: "AES-GCM",
+
+                    //Don't re-use initialization vectors!
+                    //Always generate a new iv every time your encrypt!
+                    //Recommended to use 12 bytes length
+                    iv: iv,
+
+                    //Additional authentication data (optional)
+                    // additionalData: new ArrayBuffer(),
+
+                    //Tag length (optional)
+                    // tagLength: 128, //can be 32, 64, 96, 104, 112, 120 or 128 (default)
+                },
+                sessionKey, //from generateKey or importKey above
+                enc.encode(document.querySelector("#encryptField").value) //ArrayBuffer of data you want to encrypt
+            ).then(function (ciphertext) {
                 return [iv, new Uint8Array(ciphertext)];
             });
         }
@@ -127,7 +152,7 @@
             return decryptKey(sessionKey)
                 .then(importSessionKey)
                 .then(function (sessionKey) {
-                    decryptCiphertext(sessionKey, iv, ciphertext)
+                    return decryptCiphertext(sessionKey, iv, ciphertext)
                 });
         }
 
@@ -138,22 +163,32 @@
 
         function importSessionKey(keyBytes) {
             return window.crypto.subtle.importKey(
-                "raw",
+                "raw", //can be "jwk" or "raw"
                 keyBytes,
-                {name: "AES-CBC", length: 128},
-                true,
-                ["encrypt", "decrypt"]
+                {   //this is the algorithm options
+                    name: "AES-GCM",
+                    length: 256
+                },
+                true, //whether the key is extractable (i.e. can be used in exportKey)
+                ["encrypt", "decrypt"] //can "encrypt", "decrypt", "wrapKey", or "unwrapKey"
             );
         }
 
         function decryptCiphertext(sessionKey, iv, ciphertext) {
-            return window.crypto.subtle.decrypt({name: "AES-CBC", iv: iv}, sessionKey, ciphertext).
-            then(function(plaintext) {
-                var enc = new TextDecoder("utf-8");
-                console.log(enc.decode(plaintext))
+            return window.crypto.subtle.decrypt(
+                {
+                    name: "AES-GCM",
+                    iv: iv, //The initialization vector you used to encrypt
+                    // additionalData: new ArrayBuffer(), //The addtionalData you used to encrypt (if any)
+                    // tagLength: 128 //The tagLength you used to encrypt (if any)
+                },
+                sessionKey, //from generateKey or importKey above
+                ciphertext //ArrayBuffer of the data
+            )
 
-                document.querySelector("#decryptedField").value = enc.decode(plaintext)
-            });
+                .catch(function (reason) {
+                    console.error(reason)
+                });
         }
 
 
