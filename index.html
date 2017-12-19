@@ -60,6 +60,8 @@
             document.querySelector("#decryptForm").addEventListener("submit", function (e) {
                 e.preventDefault();    //stop form from submitting
 
+                document.querySelector("#decryptMessage").textContent = "";
+
                 var sourceFile = document.querySelector("#encryptedData").files[0]
 
                 var reader = new FileReader();
@@ -82,8 +84,8 @@
 
                             document.querySelector("#decryptedField").value = enc.decode(plaintext);
                         }).catch(function (err) {
+                            document.querySelector("#decryptMessage").textContent = "Something went wrong decrypting: " + err.message;
                             console.error("Something went wrong decrypting: " + err.message + "\n" + err.stack);
-                            console.error(err);
                         });
                 }
 
@@ -201,6 +203,7 @@
 </form>
 
 <h2>Decrypt</h2>
+<span id="decryptMessage"></span>
 <form id="decryptForm">
     Password:
     <input id="decryptPassword" />
