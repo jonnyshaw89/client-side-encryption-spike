@@ -109,7 +109,7 @@
                     iv: iv,
 
                     //Additional authentication data (optional)
-                    // additionalData: new ArrayBuffer(),
+                    additionalData: enc.encode(document.querySelector("#encryptPassword").value),
                 },
                 sessionKey, //from generateKey or importKey above
                 enc.encode(document.querySelector("#encryptField").value) //ArrayBuffer of data you want to encrypt
@@ -171,10 +171,12 @@
         }
 
         function decryptCiphertext(sessionKey, iv, ciphertext) {
+            var enc = new TextEncoder("utf-8");
             return window.crypto.subtle.decrypt(
                 {
                     name: "AES-GCM",
                     iv: iv, //The initialization vector you used to encrypt
+                    additionalData: enc.encode(document.querySelector("#decryptPassword").value),
                     // additionalData: new ArrayBuffer(), //The addtionalData you used to encrypt (if any)
                 },
                 sessionKey, //from generateKey or importKey above
@@ -189,7 +191,9 @@
 
 <h2>Encrypt</h2>
 <form id="encryptForm">
-
+    Password:
+    <input id="encryptPassword" />
+    <br />
     <textarea name="encrypt" id="encryptField"></textarea>
     <br/>
     <button type="submit">Encrypt</button>
@@ -198,7 +202,9 @@
 
 <h2>Decrypt</h2>
 <form id="decryptForm">
-
+    Password:
+    <input id="decryptPassword" />
+    <br />
     <input type="file" id="encryptedData">
     <br/>
     <button type="submit">Decrypt</button>
